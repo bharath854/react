@@ -1,0 +1,180 @@
+// Required Dependencies:
+// - React
+// - TailwindCSS
+// - react-router-dom (for query params management)
+
+import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import axios from "axios";
+
+const API_URL = "https://srijandubey.github.io/campus-api-mock/SRM-C1-25.json";
+
+const specialitiesList = [
+  "General Physician", "Dentist", "Dermatologist", "Paediatrician",
+  "Gynaecologist", "ENT", "Diabetologist", "Cardiologist", "Physiotherapist",
+  "Endocrinologist", "Orthopaedic", "Ophthalmologist", "Gastroenterologist",
+  "Pulmonologist", "Psychiatrist", "Urologist", "Dietitian/Nutritionist",
+  "Psychologist", "Sexologist", "Nephrologist", "Neurologist", "Oncologist",
+  "Ayurveda", "Homeopath"
+];
+
+export default function DoctorListing() {
+  const [doctors, setDoctors] = useState([]);
+  const [filteredDoctors, setFilteredDoctors] = useState([]);
+  const [search, setSearch] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    axios.get(API_URL).then(res => {
+      setDoctors(res.data);
+      setFilteredDoctors(res.data);
+    });
+  }, []);
+
+  useEffect(() => {
+    applyFilters();
+  }, [searchParams, doctors]);
+
+  const handleSearch = (value) => {
+    setSearch(value);
+    if (value.length === 0) return setSuggestions([]);
+    const matches = doctors
+      .filter(doc => doc.name.toLowerCase().includes(value.toLowerCase()))
+      .slice(0, 3);
+    setSuggestions(matches);
+  };
+
+  const applyFilters = () => {
+    const mode = searchParams.get("mode");
+    const sort = searchParams.get("sort");
+    const specialties = searchParams.getAll("specialties");
+    const query = searchParams.get("search")?.toLowerCase();
+
+    let filtered = [...doctors];
+
+    if (query) {
+      filtered = filtered.filter(doc => doc.name.toLowerCase().includes(query));
+    }
+    if (mode && mode !== "all") {
+      filtered = filtered.filter(doc => doc.mode.toLowerCase() === mode);
+    }
+    if (specialties.length > 0) {
+      filtered = filtered.filter(doc => specialties.some(sp => doc.speciality.includes(sp)));
+    }
+    if (sort === "fees") {
+      filtered.sort((a, b) => a.fees - b.fees);
+    } else if (sort === "experience") {
+      filtered.sort((a, b) => b.experience - a.experience);
+    }
+
+    setFilteredDoctors(filtered);
+  };
+
+  const updateQuery = (key, value) => {
+    const newParams = new URLSearchParams(searchParams);
+    if (Array.isArray(value)) {
+      newParams.delete(key);
+      value.forEach(v => newParams.append(key, v));
+    } else {
+      newParams.set(key, value);
+    }
+    setSearchParams(newParams);
+  };
+
+  return (
+    <div className="flex min-h-screen bg-gray-100">
+      <aside className="w-1/4 bg-white p-4">
+        <h2 data-testid="filter-header-sort" className="font-semibold mb-2">Sort by</h2>
+        <div>
+          <label><input type="radio" name="sort" data-testid="sort-fees" onChange={() => updateQuery("sort", "fees")} /> Price: Low–High</label><br />
+          <label><input type="radio" name="sort" data-testid="sort-experience" onChange={() => updateQuery("sort", "experience")} /> Experience: Most Experience first</label>
+        </div>
+
+        <h2 data-testid="filter-header-speciality" className="font-semibold mt-4 mb-2">Specialities</h2>
+        <div className="h-48 overflow-y-auto">
+          {specialitiesList.map(sp => (
+            <label key={sp}>
+              <input
+                type="checkbox"
+                data-testid={`filter-specialty-${sp.replace(/\//g, "-")}`}
+                onChange={(e) => {
+                  const selected = searchParams.getAll("specialties");
+                  if (e.target.checked) {
+                    updateQuery("specialties", [...selected, sp]);
+                  } else {
+                    updateQuery("specialties", selected.filter(s => s !== sp));
+                  }
+                }}
+              /> {sp}<br />
+            </label>
+          ))}
+        </div>
+
+        <h2 data-testid="filter-header-moc" className="font-semibold mt-4 mb-2">Mode of consultation</h2>
+        <label><input type="radio" name="mode" data-testid="filter-video-consult" onChange={() => updateQuery("mode", "video")} /> Video Consultation</label><br />
+        <label><input type="radio" name="mode" data-testid="filter-in-clinic" onChange={() => updateQuery("mode", "inclinic")} /> In-clinic Consultation</label><br />
+        <label><input type="radio" name="mode" onChange={() => updateQuery("mode", "all")} /> All</label>
+      </aside>
+
+      <main className="w-3/4 p-6">
+        <div className="mb-4">
+          <input
+            type="text"
+            data-testid="autocomplete-input"
+            className="w-full p-2 border"
+            placeholder="Search Symptoms, Doctors, Specialists, Clinics"
+            value={search}
+            onChange={(e) => handleSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                updateQuery("search", search);
+                setSuggestions([]);
+              }
+            }}
+          />
+          {suggestions.length > 0 && (
+            <ul className="bg-white border mt-1">
+              {suggestions.map((doc, idx) => (
+                <li
+                  key={idx}
+                  data-testid="suggestion-item"
+                  className="px-2 py-1 hover:bg-gray-100 cursor-pointer"
+                  onClick={() => {
+                    updateQuery("search", doc.name);
+                    setSuggestions([]);
+                    setSearch(doc.name);
+                  }}
+                >
+                  {doc.name}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div>
+          {filteredDoctors.map((doc, idx) => (
+            <div
+              key={idx}
+              className="bg-white mb-4 p-4 rounded shadow"
+              data-testid="doctor-card"
+            >
+              <div className="flex justify-between">
+                <div>
+                  <h3 data-testid="doctor-name" className="text-lg font-bold">{doc.name}</h3>
+                  <p data-testid="doctor-specialty">{doc.speciality.join(", ")}</p>
+                  <p data-testid="doctor-experience">{doc.experience} yrs exp.</p>
+                </div>
+                <div className="text-right">
+                  <p data-testid="doctor-fee" className="text-xl">₹ {doc.fees}</p>
+                  <button className="border px-3 py-1 mt-2 rounded text-blue-600">Book Appointment</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </main>
+    </div>
+  );
+}
